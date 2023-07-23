@@ -10,6 +10,7 @@ It's really a "Fire-and-Forget" type thing. NOT a management system, just meant 
 
 I wanted to automate my app deployment process so I started writing this then found out that I could use Ansible for this but then found that it does'nt work on windows and it just supercharged my rage to build one more tool for the job. IDK maybe better ones exist but this one works for me (or at-least I hope it does I'm writing this before actually making the whole thing ;})
 
+> Would'nt it be great if you could use your already created vms and just run the configuration part on them? Well I might work on that too. But for now you can just use the script to create a new vm and configure it.
 ## Requirements
 
 - Python 3.x

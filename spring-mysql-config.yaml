@@ -1,0 +1,47 @@
+# For my own project and future reference
+# I need it to
+#   install openjdk17, mysql, ngrok on the vm
+#   create a user and database on mysql
+#   make a database if needed
+#   provide the needed environment variables
+#   go to the specified dir and build my project with mvn clean install
+#   scp the jar file to the vm
+#   run the jar file
+#   expose the port with ngrok
+#   print the ngrok url
+#   say something nice and exit
+
+project_name: "My Project"
+vm_name: "my_vm"
+vm_memory: 2048
+vm_disk_size: 30
+
+packages:
+  - openjdk17
+  - mysql
+  - ngrok
+
+mysql:
+  root_password: "root_pass"
+  user: "db_user"
+  password: "db_pass"
+  database: "db_name"
+
+env_variables:
+  - name: "ENV_VAR_1"
+    value: "value_1"
+  - name: "ENV_VAR_2"
+    value: "value_2"
+
+project_directory: "/path/to/project"
+
+build_command: "mvn clean install"
+
+jar_file: "/path/to/project/target/my_project.jar"
+
+ngrok_auth_token: "your_ngrok_auth_token"
+
+# You can specify the ngrok tunnel port, or use the default port 8080
+ngrok_port: 8080
+
+exit_message: "Congratulations! Your project is up and running at {ngrok_url}. Have a great day!"

@@ -8,8 +8,9 @@ import yaml
 from random import randint
 import requests
 from bs4 import BeautifulSoup
-from colorama import Fore, Style, init
+from colorama import Fore, init
 from halo import Halo
+import paramiko
 
 init(autoreset=True)
 
@@ -25,13 +26,16 @@ class Winceble:
             # Default Alpine Linux username and password
             "username": "root",
             "password": "toor",
-            "ssh_key_location": "~/.ssh/id_rsa.pub",
-            # Edit this to change the packages installed on the VM
-            "packages": [
-                "openjdk17",
-                "mysql",
-            ],
+            "vm_ip": self.generate_random_ip(),
+            "ssh_port": self.generate_random_port(),
+            "packages": "python3 git",
         }
+
+    def generate_random_port(self) -> int:
+        return randint(1024, 65535)
+
+    def generate_random_ip(self) -> str:
+        return ".".join([str(randint(0, 255)) for _ in range(4)])
 
     def generate_random_name(self) -> str:
         return "winceble-" + "".join([chr(randint(97, 122)) for _ in range(4)])
@@ -112,7 +116,7 @@ class Winceble:
 
     def create_vm(self, vm_name, ram_mb, disk_gb, cpu_cores):
         print(
-            f"Creating Virtual Machine with the following configuration:\nName: {vm_name}\nRAM: {ram_mb} MB\nDisk: {disk_gb} GB\nCPU: {cpu_cores} cores"
+            f"Creating Virtual Machine with the following configuration:\nName: {vm_name}\nRAM: {ram_mb} MB\nDisk: {disk_gb} GB\nCPU: {cpu_cores} cores\nIP: {self.VM_CONFIG_KEYS['vm_ip']}\nSSH Port: {self.VM_CONFIG_KEYS['ssh_port']}"
         )
         try:
             subprocess.run(
@@ -187,15 +191,25 @@ class Winceble:
             print("CPU cores configured.")
 
             subprocess.run(
-                ["VBoxManage", "modifyvm", vm_name, "--natpf1", "ssh,tcp,,2222,,22"]
+                [
+                    "VBoxManage",
+                    "modifyvm",
+                    vm_name,
+                    "--natpf1",
+                    f"ssh,tcp,,{self.VM_CONFIG_KEYS['ssh_port']},,22",
+                ]
             )
             print("Port forwarding configured.")
 
-            subprocess.run(["VBoxManage", "modifyvm", vm_name, "--vram", "9"])
-            print(f"Video memory for VM '{vm_name}' has been set to 9 MB.")
+            subprocess.run(["VBoxManage", "modifyvm", vm_name, "--vram", "16"])
+            print(f"Video memory for VM '{vm_name}' has been set to 16 MB.")
 
             sleep(1)
             print(Fore.GREEN + f"Virtual Machine {vm_name} created successfully.")
+            print(
+                Fore.BLUE
+                + f"Use ssh -p {self.VM_CONFIG_KEYS['ssh_port']} root@{self.VM_CONFIG_KEYS['vm_ip']} to connect to the VM"
+            )
 
         except subprocess.CalledProcessError as e:
             print(f"Error executing subprocess command: {e}")
@@ -314,60 +328,70 @@ class Winceble:
         print("Starting Virtual Machine to install Alpine Linux...")
         subprocess.run(["VBoxManage", "startvm", vm_name, "--type", "headless"])
 
-    def run_setup_alpine_script(self, vm_name):
-        # # echo a simple hello world script on the VM
-        # subprocess.run(
-        #     [
-        #         "VBoxManage",
-        #         "guestcontrol",
-        #         vm_name,
-        #         "run",
-        #         "--exe",
-        #         "/bin/sh",
-        #         "--username",
-        #         self.VM_CONFIG_KEYS["username"],
-        #         "--password",
-        #         self.VM_CONFIG_KEYS["password"],
-        #         "--wait-stdout",
-        #         "--wait-stderr",
-        #         "--",
-        #         "echo",
-        #         "'Hello World'",
-        #         ">",
-        #         "/root/hello_world.sh",
-        #     ]
-        # )
+    def ssh_from_host(self, vm_name):
+        # Connect to the VM from PowerShell
+        print("Trying to get SSH working...")
 
-        # # Wait for Alpine installation to complete
-        # if self.wait_for_vm_power_off(vm_name):
-        #     print("Alpine Linux installation completed.")
-        # else:
-        #     print(
-        #         "Error: Alpine Linux installation did not complete within the expected time."
-        #     )
-        #     sys.exit(1)
+        ssh_command = [
+            "ssh",
+            "-p",
+            f"{self.VM_CONFIG_KEYS['ssh_port']}",
+            f"root@{vm_name}",
+        ]
+        ssh_process = subprocess.Popen(
+            ssh_command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
 
-        # lets do some magic
+        for line in ssh_process.stdout:
+            print(line.strip())
+            if "password:" in line:
+                ssh_process.stdin.write(f"{self.VM_CONFIG_KEYS['password']}\n")
+                ssh_process.stdin.flush()
 
+        exit_code = ssh_process.wait()
+
+        if exit_code != 0:
+            print(
+                Fore.RED
+                + f"Error: SSH exited with code {exit_code}. Please check the output above."
+            )
+            print(Fore.BLUE + "VM created but not configured properly. Cleaning up...")
+            # subprocess.run(["VBoxManage", "controlvm", vm_name, "poweroff"], check=True)
+            # subprocess.run(
+            #     ["VBoxManage", "unregistervm", vm_name, "--delete"], check=True
+            # )
+            print(
+                Fore.YELLOW
+                + "Cleaned up\nTry to figure out what went wrong or just yeet this script\nGoodbye"
+            )
+            sys.exit(1)
+
+        print("SSH connection established")
+
+        # ssh_process.stdin.write("echo 'hello'\n")
+        # ssh_process.stdin.flush()
+
+    def set_up_networking_and_ssh(self, vm_name):
         # wait for the VM to boot
         print("Waiting for VM to boot...")
-
         # 30 second sleep spinner
-        seconds = 40
+        boot_wait_seconds = 40
 
         print(
             Fore.LIGHTBLUE_EX
-            + f"Let's wait for {seconds} seconds and hope that Alpine boots in that time or every command after this is ducked"
+            + f"Let's wait for {boot_wait_seconds} seconds and hope that Alpine boots in that time or every command after this is ducked"
         )
-        for i in range(seconds, 0, -1):
-            print(f"\r{seconds} seconds remaining...", end="", flush=True)
+        for _ in range(boot_wait_seconds, 0, -1):
+            print(f"\r{boot_wait_seconds} seconds remaining...", end="", flush=True)
             sleep(1)
-            seconds -= 1
+            boot_wait_seconds -= 1
         print("\rWait is over :}")
 
-        # run the setup-alpine script
-
-        print("Running setup-alpine quick script...")
         press_enter = [
             "VBoxManage",
             "controlvm",
@@ -377,85 +401,123 @@ class Winceble:
             "9C",
         ]  # 1C is enter key down and 9C is enter key up
 
-        def setup_alpine_vm():
-            # List of commands to execute on the VM
-            commands = [
-                "echo 'auto lo\niface lo inet loopback\n\nauto eth0\niface eth0 inet dhcp' > /etc/network/interfaces",
-                "echo '/media/cdrom/apks\nhttp://dl-cdn.alpinelinux.org/alpine/v3.18/main\nhttp://dl-cdn.alpinelinux.org/alpine/v3.18/community' > /etc/apk/repositories",
-                "rc-service networking start",
-                "rc-update add networking boot",
-                "apk update",
-                f"echo {self.VM_CONFIG_KEYS['username']}:{self.VM_CONFIG_KEYS['password']} | chpasswd",
-                "apk add dropbear",
-                "dropbear",
-                "rc-service dropbear start",
-            ]
+        # List of commands to execute on the VM
+        commands = [
+            "root",
+            "echo 'auto lo\niface lo inet loopback\n\nauto eth0\niface eth0 inet dhcp' > /etc/network/interfaces",
+            "echo '/media/cdrom/apks\nhttp://dl-cdn.alpinelinux.org/alpine/v3.18/main\nhttp://dl-cdn.alpinelinux.org/alpine/v3.18/community' > /etc/apk/repositories",
+            f"sed -i 's/localhost/localhost {vm_name}/' /etc/hosts",
+            "rc-service networking start",
+            "rc-update add networking boot",
+            "apk update",
+            f"echo {self.VM_CONFIG_KEYS['username']}:{self.VM_CONFIG_KEYS['password']} | chpasswd",
+            "apk add dropbear",
+            f"sed -i 's/127.0.0.1/{self.VM_CONFIG_KEYS['vm_ip']}/' /etc/hosts",
+            "dropbear",
+            "rc-service dropbear start",
+            "rc-update add dropbear boot",
+            f"apk add {self.VM_CONFIG_KEYS['packages']}",
+        ]
 
-            # Loop over the commands and execute them on the VM
-            for command in commands:
-                # Send the command to the VM
-                subprocess.run(
-                    [
-                        "VBoxManage",
-                        "controlvm",
-                        vm_name,
-                        "keyboardputstring",
-                        command,
-                    ]
-                )
+        for command in commands:
+            subprocess.run(
+                [
+                    "VBoxManage",
+                    "controlvm",
+                    vm_name,
+                    "keyboardputstring",
+                    command,
+                ]
+            )
+            subprocess.run(press_enter)
+            sleep(20) if "apk" in command else sleep(3)  # let it run
 
-                subprocess.run(press_enter)
+    def install_alpine_on_disk(self):
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-                # Sleep for a few seconds to allow the command to execute
-                sleep(20) if "apk" in command else sleep(3)
+        try:
+            client.connect(
+                self.VM_CONFIG_KEYS["vm_ip"],
+                port=self.VM_CONFIG_KEYS["ssh_port"],
+                username=self.VM_CONFIG_KEYS["username"],
+                password=self.VM_CONFIG_KEYS["password"],
+            )
+        except paramiko.AuthenticationException:
+            print("Authentication failed. Please check the username and password.")
+            return
+        except paramiko.SSHException as e:
+            print(f"Error connecting to VM: {e}")
+            return
 
-            # Connect to the VM from PowerShell
-            subprocess.run(["ssh", "-p", "2222", "root@127.0.0.1"])
+        # Send commands to the VM
+        try:
+            print(
+                Fore.LIGHTCYAN_EX
+                + "Successfully connected to the VM. Installing Alpine Linux..."
+            )
+            # stdin, stdout, stderr = client.exec_command("mkdir lol")
+            # print("Done that.")
+            stdin, stdout, stderr = client.exec_command("setup-disk -m sys -q")
+            # print("executed setup-disk")
+            # stdin.close()
             sleep(1)
-            # subprocess.run(["bab"])
+            # print("going to write sda")
+            stdin.write("sda\n")
+            # client.exec_command("sda\n")
+            print("wrote sda")
+            stdin.flush()
 
+            # There's a problem with reading STDOUT
+            # If you try to read the output of the command, it will hang forever
+            # Trick is to close STDIN after writing to it
+            # And then read the output
+
+            # stdout.channel.shutdown_write()
+            sleep(1)
+            # print(stdout.read().decode("utf-8"))
+            print("going to write y")
+            stdin.write("y\n")
+            # client.exec_command("y\n")
+
+            print("wrote y")
+            stdin.flush()
+            # print(stdout.read().decode("utf-8"))
+            stdin.close()
+
+            # Wait for the installation process to complete
+            while not stdout.channel.exit_status_ready():
+                # print(stdout.read().decode("utf-8"))
+                pass
+
+            # print(stdout.read().decode("utf-8"))
+            # print(stderr.read().decode("utf-8"))
+            print("Installation completed successfully.")
+            # Send poweroff command to the VM
+            stdin, stdout, stderr = client.exec_command("poweroff")
+        except paramiko.SSHException as e:
+            print(f"Error executing commands on VM: {e}")
+        finally:
+            client.close()
+
+        print("Detaching Alpine ISO from Virtual Machine...")
         subprocess.run(
-            ["VBoxManage", "controlvm", vm_name, "keyboardputstring", "root"]
+            [
+                "VBoxManage",
+                "storageattach",
+                self.VM_CONFIG_KEYS["vm_name"],
+                "--storagectl",
+                "IDE",
+                "--port",
+                "1",
+                "--device",
+                "0",
+                "--type",
+                "dvddrive",
+                "--medium",
+                "none",
+            ]
         )
-        subprocess.run(press_enter)
-        sleep(1)
-
-        subprocess.run(press_enter)
-        setup_alpine_vm()
-        sleep(1)
-        # subprocess.run(
-        #     [
-        #         "VBoxManage",
-        #         "controlvm",
-        #         vm_name,
-        #         "keyboardputstring",
-        #         "alpine-setup -f ANSWERS",
-        #     ]
-        # )
-        # subprocess.run(press_enter)
-
-        # print("Let's see what happens...exiting")
-
-        # sys.exit(1)
-
-        # print("Detaching Alpine ISO from Virtual Machine...")
-        # subprocess.run(
-        #     [
-        #         "VBoxManage",
-        #         "storageattach",
-        #         vm_name,
-        #         "--storagectl",
-        #         "IDE",
-        #         "--port",
-        #         "1",
-        #         "--device",
-        #         "0",
-        #         "--type",
-        #         "dvddrive",
-        #         "--medium",
-        #         "none",
-        #     ]
-        # )
 
     def verify_sha256(self, iso_filename):
         print("Verifying SHA256 checksum...")
@@ -499,10 +561,26 @@ class Winceble:
         self.mount_alpine_iso_and_start_vm(
             self.VM_CONFIG_KEYS["alpine_iso_url"], self.VM_CONFIG_KEYS["vm_name"]
         )
-        self.run_setup_alpine_script(self.VM_CONFIG_KEYS["vm_name"])
+        self.set_up_networking_and_ssh(self.VM_CONFIG_KEYS["vm_name"])
+        self.install_alpine_on_disk()
+
+        # whats after this
+        # start the vm
+        # wait for it to boot. For this we can just keep on trying to ssh into it after a sleep of 30 seconds if ssh fails then sleep for 5 and try again till it succeeds that'll mean that the vm has booted up
+        # ssh into it
+        # run the config
+        # this took 3 fukin days to get here
 
 
 if __name__ == "__main__":
+    print(
+        Fore.RED
+        + """While starting the VM with Alpine iso, I have no idea how to know when it has booted up.
+So I've added a 40 second sleep after starting the VM. If you think that's too much (or too little), you can change it in the script. Search for boot_wait_seconds.\n\nIf this script is actually useful for someone then I might look more into how to know when the VM has booted up.
+Also there's some issue with OpenSSh so I've used Dropbear instead."""
+    )
+    input("If you've read this, press Enter to continue...")
+
     if sys.platform != "win32":
         print("This script only supports Windows for now.")
         sys.exit(1)
