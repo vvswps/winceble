@@ -1,0 +1,23 @@
+cat <<EOF> ANSWERS
+HOSTNAMEOPTS="-n localhost"
+KEYMAPOPTS="us us"
+INTERFACESOPTS="auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet static
+	address 192.168.30.11
+	netmask 255.255.255.0
+	gateway 192.168.30.1
+"
+DNSOPTS="-d example.com 8.8.8.8"
+TIMEZONEOPTS="-z Asia/Kolkata"
+PROXYOPTS="none"
+APKREPOSOPTS="http://dl-cdn.alpinelinux.org/"
+rootPW="root"
+SSHDOPTS="-c openssh"
+ROOTSSHKEY= "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJ4O4nZEE+XWixV+aECzgH/p/I5+PCGNOFw/jMrqeP/WXQLTsvzXS3zW/O2qgM1U9Te7cWIFuFUvu/RvS6kv8ngQSnwLDTQgzFNs/M0ja1nfAXvNNxbvnMbn7caeODkUlYR11J5kNIs99YQJ6jdH93aez6rScAViS4TiQehP0FmmMYtbMzmiHrCWS6YSSHCFtc3Wxq0RNhFzLwDFMeupUmAvJrXiK9omgRFzVMyFRF3ceq1uwUlokDm5MFfFoeiKLF3qA+MXgsGIOgi8Ms95mVOfozWflNWsEzbIZdGJLn/w11f0NKhEodY+mpF8hjWv7ztrWJwJywQaIwBHgi0HhBaMZiRRF+XX+QojkoM80DpWqfTcir92rLzjusyj+KyXFIHUuK/elRYMc8DRPWRESeS8OfuM7MYXIOb71CbbhJ3TrdSkKRaaInTUET9iT+mXI0czChSkIqR4RlJo+qghHrlwHdfQoZmTd5hzEroYCDk6CiTDqx7SqCXyGj7Us63fk= as904@BABAjis-Laptop"
+APKPACKAGES="vim htop"
+NTPOPTS="-c chrony"
+DISKOPTS="-m sys /dev/sda"
+EOF
